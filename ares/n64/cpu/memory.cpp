@@ -185,6 +185,8 @@ auto CPU::fetch(u64 vaddr) -> maybe<u32> {
 template<u32 Size>
 auto CPU::read(u64 vaddr) -> maybe<u64> {
   if(vaddrAlignedError<Size>(vaddr, false)) return nothing;
+  GDB::server.reportMemRead(vaddr & 0x1fff'ffff, Size); // gdb will always sed a 32-bit virtual address
+  
   switch(segment(vaddr)) {
   case Context::Segment::Unused:
     step(1 * 2);
@@ -215,10 +217,37 @@ auto CPU::read(u64 vaddr) -> maybe<u64> {
   unreachable;
 }
 
+auto CPU::readDebug(u64 vaddr) -> u8 {
+  Thread dummyThread{};
+
+  switch(segment(vaddr)) {
+    case Context::Segment::Unused: return 0;
+    case Context::Segment::Mapped:
+      if(auto match = tlb.load(vaddr, true)) {
+        if(match.cache) return dcache.readDebug(vaddr, match.address & context.physMask);
+        return bus.read<Byte>(match.address & context.physMask, dummyThread);
+      }
+      return 0;
+    case Context::Segment::Cached:
+      return dcache.readDebug(vaddr, vaddr & 0x1fff'ffff);
+    case Context::Segment::Cached32:
+      return dcache.readDebug(vaddr, vaddr & 0xffff'ffff);
+    case Context::Segment::Direct:
+      return bus.read<Byte>(vaddr & 0x1fff'ffff, dummyThread);
+    case Context::Segment::Direct32:
+      return bus.read<Byte>(vaddr & 0xffff'ffff, dummyThread);
+  }
+
+  unreachable;
+}
+
 template<u32 Size>
 auto CPU::write(u64 vaddr0, u64 data, bool alignedError) -> bool {
   if(alignedError && vaddrAlignedError<Size>(vaddr0, true)) return false;
   u64 vaddr = vaddr0 & ~((u64)Size - 1);
+
+  GDB::server.reportMemWrite(vaddr0 & 0x1fff'ffff, Size); // gdb will always sed a 32-bit virtual address
+
   switch(segment(vaddr)) {
   case Context::Segment::Unused:
     step(1 * 2);

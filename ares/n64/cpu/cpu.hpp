@@ -186,6 +186,8 @@ struct CPU : Thread {
     template<u32 Size> auto write(u32 vaddr, u32 address, u64 data) -> void;
     auto power(bool reset) -> void;
 
+    auto readDebug(u32 vaddr, u32 address) -> u8;
+
     //8KB
     struct Line {
       auto hit(u32 address) const -> bool;
@@ -242,8 +244,9 @@ struct CPU : Thread {
     } entry[TLB::Entries];
 
     //tlb.cpp
-    auto load(u64 vaddr) -> Match;
-    auto load(u64 vaddr, const Entry& entry) -> maybe<Match>;
+    auto load(u64 vaddr, bool noExceptions = false) -> Match;
+    auto load(u64 vaddr, const Entry& entry, bool noExceptions = false) -> maybe<Match>;
+    
     auto loadFast(u64 vaddr) -> Match;
     auto store(u64 vaddr) -> Match;
     auto store(u64 vaddr, const Entry& entry) -> maybe<Match>;
@@ -300,6 +303,8 @@ struct CPU : Thread {
   template<u32 Size> auto write(u64 vaddr, u64 data, bool alignedError=true) -> bool;
   template<u32 Size> auto vaddrAlignedError(u64 vaddr, bool write) -> bool;
   auto addressException(u64 vaddr) -> void;
+
+  auto readDebug(u64 vaddr) -> u8;
 
   //serialization.cpp
   auto serialize(serializer&) -> void;
@@ -894,10 +899,10 @@ struct CPU : Thread {
     }
 
     auto pool(u32 address) -> Pool*;
-    auto block(u32 vaddr, u32 address) -> Block*;
+    auto block(u32 vaddr, u32 address, bool singleInstruction = false) -> Block*;
     auto fastFetchBlock(u32 address) -> Block*;
 
-    auto emit(u32 vaddr, u32 address) -> Block*;
+    auto emit(u32 vaddr, u32 address, bool singleInstruction = false) -> Block*;
     auto emitEXECUTE(u32 instruction) -> bool;
     auto emitSPECIAL(u32 instruction) -> bool;
     auto emitREGIMM(u32 instruction) -> bool;
